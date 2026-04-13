@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SHANG - FINAL LOGIC</title>
+    <style>
+        :root { --green: #00ff00; --bg: #0a0a0a; --card: #1c1c1c; --alert: #ffcc00; --red: #ff0000; --gold: #ffd700; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; margin: 0; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        
+        #game-screen { display: none; flex: 1; overflow: hidden; height: calc(100vh - 60px); width: 100vw; flex-direction: row; }
+        
+        .sidebar { 
+            background: #111; padding: 10px; display: grid;
+            grid-template-columns: 280px; grid-auto-rows: min-content;
+            gap: 15px; z-index: 10; height: 100%; overflow: hidden; align-content: center;
+        }
+
+        #left-sidebar { border-right: 2px solid #333; width: 300px; }
+        #right-sidebar { border-left: 2px solid #333; width: 300px; display: none; }
+
+        .player-card { 
+            border: 2px solid #222; padding: 12px; border-radius: 8px; 
+            background: var(--card); height: 380px; width: 280px;
+            display: flex; flex-direction: column; transition: all 0.3s ease;
+        }
+        .player-card.active { border-color: var(--green); background: #152515; box-shadow: 0 0 20px rgba(0,255,0,0.4); transform: scale(1.02); }
+        
+        .player-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 8px;}
+        .player-score { font-size: 1.6em; font-weight: 900; color: var(--green); }
+        
+        .marks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; flex: 1; }
+        .mark-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9em; height: 32px; color: #888; }
+        .symbol { font-family: 'Courier New', monospace; font-size: 2em; font-weight: 900; width: 35px; text-align: center; }
+        
+        .closed-text { color: var(--green) !important; text-shadow: 0 0 8px var(--green); }
+        .vulnerable-text { color: var(--red) !important; text-shadow: 0 0 5px var(--red); }
+
+        .board-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; position: relative; padding: 20px; }
+        #dart-tracker { display: flex; gap: 15px; margin-bottom: 15px; }
+        .dart-slot { width: 100px; height: 45px; border-bottom: 3px solid #333; text-align: center; display: flex; align-items: center; justify-content: center; color: #444; font-size: 1.1em; }
+        .dart-slot.filled { color: var(--green); border-color: var(--green); font-weight: bold; }
+
+        svg { height: 85%; width: auto; max-width: 95%; }
+        .board-text { fill: white; font-size: 24px; font-weight: bold; pointer-events: none; }
+
+        .modal { display: none; position: fixed; inset:0; background: rgba(0,0,0,0.95); z-index: 9999; align-items: center; justify-content: center; }
+        .modal-content { background: #1a1a1a; padding: 35px; border: 4px solid var(--green); border-radius: 20px; width: 480px; text-align: center; }
+        .modal-btn { padding: 20px; margin: 10px 0; cursor: pointer; background: var(--green); border: none; font-weight: 900; width: 100%; border-radius: 12px; color: black; font-size: 1.3em; text-transform: uppercase; }
+
+        .ticker-wrap { height: 60px; background: #000; border-top: 2px solid #333; overflow: hidden; }
+        .ticker-move { display: flex; width: fit-content; animation: seamless 15s linear infinite; }
+        .ticker-item { display: flex; align-items: center; justify-content: center; white-space: nowrap; min-width: 850px; font-size: 2.2em; color: var(--green); line-height: 60px; font-weight: 900; }
+        @keyframes seamless { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+        #victory-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.98); z-index: 10000; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .victory-title { font-size: 5em; font-weight: 900; margin-bottom: 10px; }
+        .shang-theme { color: var(--green); text-shadow: 0 0 30px var(--green); }
+        .red-theme { color: var(--red); text-shadow: 0 0 60px var(--red); }
+
+        .leaderboard-table { width: 80%; max-width: 600px; border-collapse: collapse; margin-top: 30px; background: #111; border: 1px solid #333; }
+        .leaderboard-table th { background: #222; color: var(--green); padding: 15px; text-align: left; text-transform: uppercase; border-bottom: 2px solid #333; }
+        .leaderboard-table td { padding: 15px; border-bottom: 1px solid #222; font-size: 1.2em; }
+        .row-winner { background: #152515; color: var(--green); font-weight: bold; }
+
+        #setup-screen { position: fixed; inset: 0; background: var(--bg); z-index: 5000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .setup-box { background: var(--card); padding: 30px; border-radius: 15px; width: 450px; text-align: center; }
+        .start-btn { padding: 18px; background: var(--green); border: none; font-weight: bold; width: 450px; font-size: 1.6em; margin-top: 25px; cursor: pointer; border-radius: 8px; }
+    </style>
+</head>
+<body>
+
+<div id="game-screen">
+    <div class="sidebar" id="left-sidebar"></div>
+    <div class="board-area">
+        <div id="dart-tracker">
+            <div class="dart-slot" id="slot-0">DART 1</div>
+            <div class="dart-slot" id="slot-1">DART 2</div>
+            <div class="dart-slot" id="slot-2">DART 3</div>
+        </div>
+        <svg id="main-svg" viewBox="0 0 500 500">
+            <circle cx="250" cy="250" r="245" fill="#111" />
+            <g id="segments"></g>
+            <g id="numbers-layer"></g>
+        </svg>
+        <div style="margin-top:25px; display:flex; gap:15px;">
+            <button onclick="masterUndo()" style="background:#333; color:white; border:none; padding:12px 25px; border-radius:8px; cursor:pointer;">UNDO</button>
+            <button onclick="location.reload()" style="background:#400; color:#ff8888; border:none; padding:12px 25px; border-radius:8px; cursor:pointer;">RESTART</button>
+        </div>
+    </div>
+    <div class="sidebar" id="right-sidebar"></div>
+</div>
+
+<div id="setup-screen">
+    <h1 style="color: var(--green); letter-spacing: 20px; font-weight:900;">SHANG</h1>
+    <div class="setup-box">
+        <input type="number" id="player-count" value="2" min="1" max="8" onchange="generateNameInputs()" style="width: 100px; background:#000; color:#0f0; border:2px solid #0f0; font-size: 2em; text-align:center;">
+        <div id="name-inputs" style="margin-top:20px;"></div>
+    </div>
+    <button class="start-btn" onclick="startGame()">START SESSION</button>
+</div>
+
+<div id="nomination-overlay" class="modal">
+    <div class="modal-content">
+        <h2 id="modal-title">NOMINATE</h2>
+        <div id="nomination-options"></div>
+    </div>
+</div>
+
+<div id="victory-overlay">
+    <div class="victory-title" id="vic-text">SHANG!</div>
+    <div id="vic-sub" style="font-size: 2.5em; color: white; margin-top: 5px; font-weight:bold;"></div>
+    <div id="leaderboard-container" style="width: 100%; display: flex; justify-content: center;"></div>
+    <button id="vic-btn" class="modal-btn" style="width:300px; margin-top:40px;">NEW GAME</button>
+</div>
+
+<div class="ticker-wrap" id="ticker-wrap"><div class="ticker-move" id="ticker-container"></div></div>
+
+<script>
+    const TARGETS = ["20", "19", "18", "17", "16", "15", "Doubles", "Triples", "Beds", "Bull"];
+    let players = [], currentPlayer = 0, turnDarts = [], historyStack = [];
+
+    function generateNameInputs() {
+        const container = document.getElementById('name-inputs');
+        const count = Math.min(document.getElementById('player-count').value, 8);
+        container.innerHTML = '';
+        for(let i=1; i<=count; i++) {
+            container.innerHTML += `<input type="text" class="name-field" id="p-name-${i}" placeholder="PLAYER ${i}" style="background:#000; color:#fff; border:1px solid #555; padding:12px; border-radius:4px; width:100%; margin-top:8px;">`;
+        }
+    }
+
+    function startGame() {
+        const count = Math.min(document.getElementById('player-count').value, 8);
+        for(let i=1; i<=count; i++) {
+            players.push({ name: document.getElementById(`p-name-${i}`).value || `PLAYER ${i}`, score: 0, progress: {}, closed: [] });
+        }
+        document.getElementById('setup-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'flex';
+        if (players.length >= 3) document.getElementById('right-sidebar').style.display = 'grid';
+        initBoard(); updateUI(); updateScroller();
+    }
+
+    function updateUI() {
+        const leftBox = document.getElementById('left-sidebar');
+        const rightBox = document.getElementById('right-sidebar');
+        leftBox.innerHTML = ''; rightBox.innerHTML = '';
+        let splitIdx = players.length <= 2 ? 2 : Math.ceil(players.length / 2);
+
+        players.forEach((p, i) => {
+            let marksHtml = TARGETS.map(t => {
+                let hits = p.progress[t] || 0;
+                let sym = hits === 1 ? "/" : hits === 2 ? "X" : hits >= 3 ? "⦻" : "—";
+                let othersClosed = players.some((other, idx) => idx !== i && other.closed.includes(t));
+                let stateClass = p.closed.includes(t) ? "closed-text" : (othersClosed ? "vulnerable-text" : "");
+                return `<div class="mark-row ${stateClass}"><span>${t}</span><span class="symbol">${sym}</span></div>`;
+            }).join('');
+            let card = document.createElement('div');
+            card.className = `player-card ${i===currentPlayer?'active':''}`;
+            card.innerHTML = `<div class="player-header"><span>${p.name}</span><span class="player-score">${p.score}</span></div><div class="marks-grid">${marksHtml}</div>`;
+            if (i < splitIdx) leftBox.appendChild(card); else rightBox.appendChild(card);
+        });
+    }
+
+    function handleDartClick(val, mult) {
+        if (turnDarts.length >= 3) return;
+        saveToHistory();
+        turnDarts.push({ val, mult, nomHits: 1, key: null });
+        refreshDartSlots(); 
+        updateScroller();
+        if (turnDarts.length === 3) checkMilestones();
+    }
+
+    function updateScroller() {
+        const container = document.getElementById('ticker-container');
+        container.innerHTML = '';
+        let msg = `${players[currentPlayer].name.toUpperCase()} TO THROW...`;
+        let color = "var(--green)";
+        
+        if (turnDarts.length === 2) {
+            const d1 = turnDarts[0];
+            const d2 = turnDarts[1];
+            
+            // Check for Super Shang potential
+            const hasT20 = (d1.val === 20 && d1.mult === 3) || (d2.val === 20 && d2.mult === 3);
+            const hasD20 = (d1.val === 20 && d1.mult === 2) || (d2.val === 20 && d2.mult === 2);
+            const hasDBull = (d1.val === 25 && d1.mult === 2) || (d2.val === 25 && d2.mult === 2);
+
+            if ((hasT20 && hasD20) || (hasT20 && hasDBull) || (hasD20 && hasDBull)) {
+                msg = "SUPER SHANG THREAT DETECTED";
+                color = "var(--red)";
+            } 
+            // Only alert for standard Shang if NOT Bullseye (since Bull can't Triple)
+            else if (d1.val === d2.val && d1.mult !== d2.mult && d1.val !== 25) {
+                msg = "CAN SHANG - MUST SHANG";
+                color = "var(--alert)";
+            }
+        }
+
+        for(let i=0; i<10; i++) {
+            const item = document.createElement('div');
+            item.className = 'ticker-item';
+            item.style.color = color;
+            item.innerText = msg;
+            container.appendChild(item);
+        }
+    }
+
+    function checkMilestones() {
+        const p = players[currentPlayer];
+        const hasDBull = turnDarts.some(d => d.val === 25 && d.mult === 2);
+        const hasT20 = turnDarts.some(d => d.val === 20 && d.mult === 3);
+        const hasD20 = turnDarts.some(d => d.val === 20 && d.mult === 2);
+        
+        // 1. SUPER SHANG (Instant Win Condition)
+        if (hasDBull && hasT20 && hasD20) { 
+            triggerVictory("SUPER SHANG", `${p.name} WINS`, 'red', true); 
+            return; 
+        }
+        
+        let sameVal = turnDarts.every(d => d.val === turnDarts[0].val);
+        let mults = turnDarts.map(d => d.mult).sort((a,b) => a-b).join('');
+        
+        // 2. STANDARD SHANG (Penalty - Excludes Bullseye 25)
+        if (sameVal && mults === '123' && turnDarts[0].val !== 25) {
+            triggerVictory("SHANG!", `+200 PENALTY!`, 'shang', false, () => {
+                document.getElementById('victory-overlay').style.display = 'none';
+                players.filter((_, idx) => idx !== currentPlayer).forEach(o => { 
+                    if (!o.closed.includes(turnDarts[0].val.toString())) o.score += 200; 
+                });
+                updateUI(); finishTurn();
+            });
+            return;
+        }
+
+        // 3. BEDS
+        if (sameVal && (turnDarts[0].val >= 15 || turnDarts[0].val === 25)) { 
+            askForBed(turnDarts[0].val === 25 ? "BULL" : turnDarts[0].val); 
+        } else { 
+            showNomination(0); 
+        }
+    }
+
+    function triggerVictory(title, sub, type, isInstant, customOnClose) {
+        const ov = document.getElementById('victory-overlay');
+        const vt = document.getElementById('vic-text');
+        const vs = document.getElementById('vic-sub');
+        const lbContainer = document.getElementById('leaderboard-container');
+        
+        vt.innerText = title;
+        vs.innerText = sub;
+        vt.className = "victory-title " + (type === 'red' ? 'red-theme' : 'shang-theme');
+        
+        if (isInstant) {
+            let sorted = [...players].sort((a, b) => a.score - b.score);
+            let table = `<table class="leaderboard-table"><tr><th>Rank</th><th>Player</th><th>Score</th><th>Closed</th></tr>`;
+            sorted.forEach((pl, idx) => {
+                const isWinner = pl.name === players[currentPlayer].name;
+                table += `<tr class="${isWinner ? 'row-winner' : ''}">
+                    <td>${idx + 1}</td>
+                    <td>${pl.name} ${isWinner ? '🏆' : ''}</td>
+                    <td>${pl.score}</td>
+                    <td>${pl.closed.length}/10</td>
+                </tr>`;
+            });
+            table += `</table>`;
+            lbContainer.innerHTML = table;
+        } else {
+            lbContainer.innerHTML = "";
+        }
+
+        const vb = document.getElementById('vic-btn');
+        vb.innerText = isInstant ? "NEW GAME" : "CONTINUE";
+        vb.onclick = isInstant ? () => location.reload() : (customOnClose || (() => { ov.style.display = 'none'; finishTurn(); }));
+        ov.style.display = 'flex';
+    }
+
+    function refreshDartSlots() {
+        for(let i=0; i<3; i++) {
+            const slot = document.getElementById(`slot-${i}`);
+            if (turnDarts[i]) {
+                let d = turnDarts[i];
+                let pfx = d.mult === 2 ? 'D' : d.mult === 3 ? 'T' : '';
+                slot.innerText = (d.val === 25 ? (d.mult === 2 ? 'DBULL' : 'BULL') : pfx + d.val);
+                slot.classList.add('filled');
+            } else { slot.innerText = `DART ${i+1}`; slot.classList.remove('filled'); }
+        }
+    }
+
+    function showNomination(idx) {
+        if (idx >= 3) { finalizeTurn(); return; }
+        const d = turnDarts[idx];
+        if (d.val < 15 && d.val !== 25 && d.mult > 1) { d.nomHits = 1; d.key = (d.mult === 2) ? 'Doubles' : 'Triples'; showNomination(idx + 1); return; }
+        if (d.mult === 1) { d.nomHits = 1; d.key = (d.val === 25 ? "Bull" : d.val.toString()); showNomination(idx + 1); } 
+        else {
+            document.getElementById('nomination-overlay').style.display = 'flex';
+            const container = document.getElementById('nomination-options');
+            container.innerHTML = '';
+            document.getElementById('modal-title').innerText = `DART ${idx+1}: ${d.mult === 3 ? 'T' : 'D'}${d.val === 25 ? 'BULL' : d.val}`;
+            const b1 = document.createElement('button'); b1.className='modal-btn';
+            b1.innerText = `${d.mult} HITS ON ${d.val}`;
+            b1.onclick = () => { d.nomHits = d.mult; d.key = (d.val === 25 ? "Bull" : d.val.toString()); showNomination(idx+1); };
+            container.appendChild(b1);
+            const b2 = document.createElement('button'); b2.className='modal-btn';
+            b2.innerText = `1 HIT ON ${d.mult===2?'DOUBLES':'TRIPLES'}`;
+            b2.onclick = () => { d.nomHits = 1; d.key = d.mult===2?'Doubles':'Triples'; showNomination(idx+1); };
+            container.appendChild(b2);
+        }
+    }
+
+    function finalizeTurn() {
+        document.getElementById('nomination-overlay').style.display = 'none';
+        let p = players[currentPlayer], opps = players.filter((_, i) => i !== currentPlayer);
+        turnDarts.forEach(d => {
+            let pts = (d.val === 25) ? (d.mult === 2 ? 50 : 25) : d.val * d.mult;
+            applyMark(p, d.key, d.nomHits, pts, opps);
+        });
+        updateUI(); 
+        if (!checkStandardWinner()) { finishTurn(); }
+    }
+
+    function applyMark(p, key, hits, val, opps) {
+        if (!TARGETS.includes(key)) return;
+        for (let i = 0; i < hits; i++) {
+            if (p.closed.includes(key)) { opps.forEach(o => { if (!o.closed.includes(key)) o.score += (val / hits); }); } 
+            else { p.progress[key] = (p.progress[key] || 0) + 1; if (p.progress[key] >= 3) { p.progress[key] = 3; if(!p.closed.includes(key)) p.closed.push(key); } }
+        }
+    }
+
+    function checkStandardWinner() {
+        const p = players[currentPlayer];
+        if (p.closed.length === TARGETS.length) {
+            const lowestScore = Math.min(...players.map(pl => pl.score));
+            if (p.score <= lowestScore) {
+                triggerVictory("VICTORY!", `${p.name.toUpperCase()} WINS THE SESSION`, 'shang', true);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function askForBed(valLabel) {
+        document.getElementById('nomination-overlay').style.display = 'flex';
+        document.getElementById('modal-title').innerText = `${valLabel} BED?`;
+        const container = document.getElementById('nomination-options');
+        container.innerHTML = `<button class="modal-btn" onclick="finalizeWithBed(true)">YES - BED</button><button class="modal-btn" style="background:#444; color:white;" onclick="showNomination(0)">NO - SINGLE HITS</button>`;
+    }
+
+    function finalizeWithBed(isBed) {
+        document.getElementById('nomination-overlay').style.display = 'none';
+        if(isBed) { applyMark(players[currentPlayer], "Beds", 1, 0, players.filter((_, i) => i !== currentPlayer)); updateUI(); if (!checkStandardWinner()) finishTurn(); }
+    }
+
+    function finishTurn() { setTimeout(() => { currentPlayer = (currentPlayer + 1) % players.length; turnDarts = []; refreshDartSlots(); updateUI(); updateScroller(); }, 400); }
+    function saveToHistory() { historyStack.push(JSON.stringify({ players, currentPlayer, turnDarts })); }
+    function masterUndo() { if (historyStack.length > 0) { const last = JSON.parse(historyStack.pop()); players = last.players; currentPlayer = last.currentPlayer; turnDarts = last.turnDarts; updateUI(); refreshDartSlots(); updateScroller(); } }
+
+    function initBoard() {
+        const segs = document.getElementById('segments');
+        const numsLayer = document.getElementById('numbers-layer');
+        const v = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+        v.forEach((val, i) => {
+            const angle = (i * 18) - 90; const rad = angle * Math.PI / 180;
+            drawArc(segs, 190, 175, val, 2, i%2===0?"#D20000":"#009246", angle);
+            drawArc(segs, 175, 110, val, 1, i%2===0?"#000":"#ddd", angle);
+            drawArc(segs, 110, 95, val, 3, i%2===0?"#D20000":"#009246", angle);
+            drawArc(segs, 95, 16, val, 1, i%2===0?"#000":"#ddd", angle);
+            const tx = 250 + 220 * Math.cos(rad); const ty = 250 + 220 * Math.sin(rad) + 8;
+            const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            txt.setAttribute("x", tx); txt.setAttribute("y", ty); txt.setAttribute("text-anchor", "middle"); txt.setAttribute("class", "board-text");
+            txt.textContent = val; numsLayer.appendChild(txt);
+        });
+        const b1 = document.createElementNS("http://www.w3.org/2000/svg", "circle"); b1.setAttribute("cx", 250); b1.setAttribute("cy", 250); b1.setAttribute("r", 16); b1.setAttribute("fill", "#009246"); b1.onclick = () => handleDartClick(25, 1); segs.appendChild(b1);
+        const b2 = document.createElementNS("http://www.w3.org/2000/svg", "circle"); b2.setAttribute("cx", 250); b2.setAttribute("cy", 250); b2.setAttribute("r", 7); b2.setAttribute("fill", "#D20000"); b2.onclick = () => handleDartClick(25, 2); segs.appendChild(b2);
+    }
+
+    function drawArc(container, r1, r2, v, m, color, angle) {
+        const rad = d => (d * Math.PI) / 180;
+        const x1 = 250+r1*Math.cos(rad(angle-9)), y1 = 250+r1*Math.sin(rad(angle-9)), x2 = 250+r1*Math.cos(rad(angle+9)), y2 = 250+r1*Math.sin(rad(angle+9)), x3 = 250+r2*Math.cos(rad(angle+9)), y3 = 250+r2*Math.sin(rad(angle+9)), x4 = 250+r2*Math.cos(rad(angle-9)), y4 = 250+r2*Math.sin(rad(angle-9));
+        const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        p.setAttribute("d", `M ${x1} ${y1} A ${r1} ${r1} 0 0 1 ${x2} ${y2} L ${x3} ${y3} A ${r2} ${r2} 0 0 0 ${x4} ${y4} Z`);
+        p.setAttribute("fill", color); p.setAttribute("stroke", "#444");
+        p.onclick = () => handleDartClick(v, m); container.appendChild(p);
+    }
+    generateNameInputs();
+</script>
+</body>
+</html>

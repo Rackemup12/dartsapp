@@ -1,0 +1,21 @@
+{
+  "short_name": "X01 Elite",
+  "name": "X01 Elite Darts Scorer",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "index.html",
+  "background_color": "#0a0a0a",
+  "theme_color": "#00ff00",
+  "display": "standalone",
+  "orientation": "landscape"
+}
